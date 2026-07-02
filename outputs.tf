@@ -1,72 +1,53 @@
-output "private_key_algorithms" {
-  description = "Algorithm used for each generated key (e.g. RSA, ED25519)"
-  value       = { for name, r in tls_private_key.ssh_key : name => r.algorithm }
+# No private key material is ever exported. The old module's sensitive private-key outputs are gone
+# deliberately: generated private keys go to the key vault (write-only), and everything here is
+# public material, metadata, and ids.
+
+output "ssh_public_keys" {
+  description = "The Azure SSH public key resources, keyed by name. Full resource objects (public material only)."
+  value       = azurerm_ssh_public_key.this
 }
 
-output "private_key_ecdsa_curves" {
-  description = "ECDSA curve (only set when algorithm is ECDSA)"
-  value       = { for name, r in tls_private_key.ssh_key : name => r.ecdsa_curve }
+output "ids" {
+  description = "Map of key name to Azure SSH public key resource id."
+  value       = { for k, r in azurerm_ssh_public_key.this : k => r.id }
 }
 
-output "private_key_resource_ids" {
-  description = "Terraform resource IDs for each tls_private_key instance"
-  value       = { for name, r in tls_private_key.ssh_key : name => r.id }
+output "ids_zipmap" {
+  description = "Map of key name to { name, id }, for easy composition with other modules."
+  value       = { for k, r in azurerm_ssh_public_key.this : k => { name = r.name, id = r.id } }
 }
 
-output "private_key_rsa_bits" {
-  description = "RSA key length (only set when algorithm is RSA)"
-  value       = { for name, r in tls_private_key.ssh_key : name => r.rsa_bits }
-}
-
-output "private_keys_openssh" {
-  description = "OpenSSH-formatted private keys (sensitive), keyed by SSH-key name"
-  sensitive   = true
-  value       = { for name, r in tls_private_key.ssh_key : name => r.private_key_openssh }
-}
-
-output "private_keys_pem" {
-  description = "PEM-encoded private keys (sensitive), keyed by SSH-key name"
-  sensitive   = true
-  value       = { for name, r in tls_private_key.ssh_key : name => r.private_key_pem }
-}
-
-output "private_keys_pem_pkcs8" {
-  description = "PKCS#8-formatted private keys (sensitive), keyed by SSH-key name"
-  sensitive   = true
-  value       = { for name, r in tls_private_key.ssh_key : name => r.private_key_pem_pkcs8 }
-}
-
-output "public_key_fingerprint_md5" {
-  description = "MD5 fingerprints of generated public keys, keyed by SSH-key name"
-  value       = { for name, r in tls_private_key.ssh_key : name => r.public_key_fingerprint_md5 }
-}
-
-output "public_key_fingerprint_sha256" {
-  description = "SHA-256 fingerprints of generated public keys, keyed by SSH-key name"
-  value       = { for name, r in tls_private_key.ssh_key : name => r.public_key_fingerprint_sha256 }
+output "names" {
+  description = "Map of key name to name (convenience passthrough)."
+  value       = { for k, r in azurerm_ssh_public_key.this : k => r.name }
 }
 
 output "public_keys_openssh" {
-  description = "OpenSSH public keys, keyed by SSH-key name"
-  value       = { for name, r in tls_private_key.ssh_key : name => r.public_key_openssh }
+  description = "Map of key name to the OpenSSH public key text (what a VM's admin_ssh_key consumes)."
+  value       = { for k, r in azurerm_ssh_public_key.this : k => r.public_key }
 }
 
-output "public_keys_pem" {
-  description = "PEM-encoded public keys, keyed by SSH-key name"
-  value       = { for name, r in tls_private_key.ssh_key : name => r.public_key_pem }
+output "public_key_fingerprints_sha256" {
+  description = "Map of GENERATED key name to the SHA256 public key fingerprint."
+  value       = { for k, r in tls_private_key.this : k => r.public_key_fingerprint_sha256 }
 }
 
-output "ssh_public_key_ids" {
-  description = "azurerm_ssh_public_key IDs, keyed by SSH-key name"
-  value       = { for k in azurerm_ssh_public_key.ssh_key : k.name => k.id }
+output "public_key_fingerprints_md5" {
+  description = "Map of GENERATED key name to the MD5 public key fingerprint."
+  value       = { for k, r in tls_private_key.this : k => r.public_key_fingerprint_md5 }
 }
 
-output "ssh_public_key_names" {
-  description = "azurerm_ssh_public_key resource names, keyed by SSH-key name"
-  value       = { for k in azurerm_ssh_public_key.ssh_key : k.name => k.name }
+output "private_key_secret_ids" {
+  description = "Map of key name to the vaulted private key secret's versioned id (generated, vault-stored keys only)."
+  value       = { for k, s in azurerm_key_vault_secret.private_key : k => s.id }
 }
 
-output "ssh_public_key_texts" {
-  description = "OpenSSH public-key text, keyed by SSH-key name"
-  value       = { for k in azurerm_ssh_public_key.ssh_key : k.name => k.public_key }
+output "private_key_secret_versionless_ids" {
+  description = "Map of key name to the vaulted private key secret's versionless id (always resolves to the latest version)."
+  value       = { for k, s in azurerm_key_vault_secret.private_key : k => s.versionless_id }
+}
+
+output "resource_group_name" {
+  description = "The resource group the SSH public keys live in, parsed from resource_group_id."
+  value       = local.rg_name
 }
