@@ -138,6 +138,46 @@ run "rejects_generated_without_vault" {
   ]
 }
 
+# ED25519 end to end: the provider's client-side public_key validation accepts ssh-ed25519 (BYO
+# carries a real ed25519 key through the Azure resource), and generation accepts the algorithm.
+run "ed25519_supported" {
+  command = apply
+
+  variables {
+    ssh_keys = {
+      byo-ed = {
+        public_key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIMYVf/be1JH06E7HqRjPvFq8uvTBtXqOtEhvONICACzt probe"
+      }
+      generated-ed = {
+        algorithm = "ED25519"
+      }
+    }
+  }
+
+  assert {
+    condition     = startswith(azurerm_ssh_public_key.this["byo-ed"].public_key, "ssh-ed25519 ")
+    error_message = "A bring-your-own ed25519 key should pass the provider's public_key validation."
+  }
+
+  assert {
+    condition     = length(azurerm_key_vault_secret.private_key) == 1 && azurerm_key_vault_secret.private_key["generated-ed"].name == "generated-ed"
+    error_message = "The generated ed25519 key should land in the vault like any other."
+  }
+}
+
+# An unknown algorithm is rejected by variable validation.
+run "rejects_unknown_algorithm" {
+  command = plan
+
+  variables {
+    ssh_keys = {
+      dsa = { algorithm = "DSA" }
+    }
+  }
+
+  expect_failures = [var.ssh_keys]
+}
+
 # Weak RSA sizes are rejected by variable validation.
 run "rejects_weak_rsa" {
   command = plan

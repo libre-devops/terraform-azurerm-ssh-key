@@ -12,8 +12,8 @@ locals {
 
 # Ephemeral generation: the key pair is created during the run and NEVER stored in plan or state.
 # Both halves are written to the vault write-only below; the public half is then read back (public
-# material, safe to persist) to feed the Azure resource. Azure's SSH public key resource only accepts
-# ssh-rsa at 2048-bit or larger, so the algorithm is fixed to RSA and only the size is configurable.
+# material, safe to persist) to feed the Azure resource. Azure accepts ssh-rsa (2048-bit or larger)
+# and ssh-ed25519 keys (the provider doc's rsa-only line is stale; verified against ARM directly).
 #
 # An ephemeral resource regenerates every run, but value_wo is only sent when value_wo_version
 # changes, so the vault content is stable until you bump the version, which rotates the whole pair
@@ -21,8 +21,8 @@ locals {
 ephemeral "tls_private_key" "this" {
   for_each = local.generated
 
-  algorithm = "RSA"
-  rsa_bits  = each.value.rsa_bits
+  algorithm = each.value.algorithm
+  rsa_bits  = each.value.algorithm == "RSA" ? each.value.rsa_bits : null
 }
 
 # The private half: write-only into the vault, never in state, never in the plan.

@@ -99,6 +99,11 @@ module "ssh_key" {
       tags                   = { Component = "compute" }
     }
 
+    # Generated ED25519 (Azure accepts ssh-ed25519 alongside ssh-rsa).
+    "ssh-${var.short}-${var.loc}-${terraform.workspace}-ed25519" = {
+      algorithm = "ED25519"
+    }
+
     # Bring your own: only the Azure resource, no private key anywhere (throwaway example key).
     "ssh-${var.short}-${var.loc}-${terraform.workspace}-byo" = {
       public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCtbmPhzCR+ZpI/Y4H1IvPEI+tvGT4R5ReLtj5QZVcRXJiRdIbYsb6sjaYu8JcR6vzSHAlJcx0zmcSP4SR7HqtuXbODv+OvVpBCoil9LWbCfOgOQ6XZ3oSFYe8lFllbFLiM7I+ok+s7Cygnu58fil7pDdBFrS7DZRjvT87RrOX0dp2LDNNN7LYFy5nwHvkBv9z36q9RFGcP4e0XDNtU0+LGnolz4oDWkJt/0POaHIxnJJX7ge0r0bReZq/t1XRr/RrhPYk6gkWsSkfbwwxGPA2UdxFRDVn2aMx6Hz8gQfcHRS2kEvKRMIgQfBOmB6OInLCLaUZRWm5YdEBZXwtdREor example"

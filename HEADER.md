@@ -28,14 +28,14 @@ never touch Terraform state.
 
 SSH keys keyed by the Azure resource name, in two modes per entry:
 
-- **Bring your own** (`public_key` set): only the `azurerm_ssh_public_key` resource is created; no
-  private key exists anywhere. The most state-hygienic mode.
+- **Bring your own** (`public_key` set, ssh-rsa or ssh-ed25519): only the `azurerm_ssh_public_key`
+  resource is created; no private key exists anywhere. The most state-hygienic mode.
 - **Generate** (the default): the key pair comes from the tls provider's **ephemeral**
   `tls_private_key`, so it exists only during the run and is **never stored in plan or state**. Both
   halves are written into your Key Vault through the provider's write-only `value_wo` argument, and
-  the public half is read back (public material, safe to persist) to create the Azure resource. Azure
-  only accepts ssh-rsa at 2048-bit or larger, so the algorithm is fixed and only `rsa_bits` varies
-  (default 4096).
+  the public half is read back (public material, safe to persist) to create the Azure resource.
+  `algorithm` picks **RSA** (default, `rsa_bits` >= 2048, default 4096) or **ED25519** (the provider
+  doc's rsa-only claim is stale; ed25519 acceptance was verified against ARM directly).
 
 Rotation is one knob: an ephemeral resource regenerates every run, but the vault is only written when
 `value_wo_version` changes, so bumping it rotates the whole pair (both halves come from the same

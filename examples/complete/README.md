@@ -16,8 +16,8 @@
 
 The full surface of the module: a generated key with the secure defaults (RSA 4096, private key
 written to the vault through value_wo), a generated key exercising every storage option (size, secret
-name, OpenSSH format, content type, expiry, a bumped rotation version, per-key tags), and a
-bring-your-own public key alongside them. The vault the private keys land in allow-lists the runner's
+name, OpenSSH format, content type, expiry, a bumped rotation version, per-key tags), a generated
+ED25519 key, and a bring-your-own public key alongside them. The vault the private keys land in allow-lists the runner's
 egress IP (this subscription enforces default-deny network rules on key vaults) and uses access
 policies so the data-plane writes work immediately. Run it with `just e2e complete`, which applies
 the stack then always destroys it.
@@ -127,6 +127,11 @@ module "ssh_key" {
       secret_expiration_date = "2027-01-01T00:00:00Z"
       value_wo_version       = 2
       tags                   = { Component = "compute" }
+    }
+
+    # Generated ED25519 (Azure accepts ssh-ed25519 alongside ssh-rsa).
+    "ssh-${var.short}-${var.loc}-${terraform.workspace}-ed25519" = {
+      algorithm = "ED25519"
     }
 
     # Bring your own: only the Azure resource, no private key anywhere (throwaway example key).

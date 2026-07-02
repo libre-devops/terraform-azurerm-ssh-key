@@ -29,17 +29,17 @@ variable "ssh_keys" {
   description = <<DESC
 The SSH keys to manage, keyed by the Azure SSH public key resource name. Two modes per entry:
 
-- Bring your own: set public_key (ssh-rsa, at least 2048-bit, per the Azure resource's contract) and
-  only the Azure public key resource is created; no private key exists anywhere.
+- Bring your own: set public_key (ssh-rsa at 2048-bit or larger, or ssh-ed25519) and only the Azure
+  public key resource is created; no private key exists anywhere.
 - Generate (when public_key is null, the default): the key pair is generated EPHEMERALLY (never in
   plan or state) and both halves are written into key_vault_id through the provider's write-only
   value_wo argument; the public half is read back (public material, safe to persist) to create the
-  Azure public key resource. Azure only accepts ssh-rsa public keys, so the algorithm is fixed and
-  only rsa_bits varies (default 4096). Rotation is one knob: bump value_wo_version and a freshly
-  generated pair replaces both secrets and the Azure resource's key. The module deliberately exports
-  NO private key material.
+  Azure public key resource. algorithm picks RSA (default; size via rsa_bits, default 4096, minimum
+  2048 per Azure) or ED25519. Rotation is one knob: bump value_wo_version and a freshly generated
+  pair replaces both secrets and the Azure resource's key. The module deliberately exports NO private
+  key material.
 
-Generated-key attributes: rsa_bits; secret_name (defaults to the key name with underscores dashed,
+Generated-key attributes: algorithm and rsa_bits; secret_name (defaults to the key name with underscores dashed,
 since vault secret names forbid underscores); public_secret_name (defaults to the private name with a
 -pub suffix); secret_format for the private half (pem, openssh, or pkcs8; default pem);
 secret_content_type; secret_expiration_date / secret_not_before_date; value_wo_version (bump to
@@ -48,6 +48,7 @@ DESC
 
   type = map(object({
     public_key = optional(string)
+    algorithm  = optional(string, "RSA")
     rsa_bits   = optional(number, 4096)
 
     secret_name            = optional(string)
@@ -63,8 +64,13 @@ DESC
   default = {}
 
   validation {
-    condition     = alltrue([for k in values(var.ssh_keys) : k.rsa_bits >= 2048])
-    error_message = "rsa_bits must be at least 2048 (the Azure SSH public key resource rejects smaller keys)."
+    condition     = alltrue([for k in values(var.ssh_keys) : contains(["RSA", "ED25519"], k.algorithm)])
+    error_message = "algorithm must be RSA or ED25519 (the two key types the Azure SSH public key resource accepts)."
+  }
+
+  validation {
+    condition     = alltrue([for k in values(var.ssh_keys) : k.algorithm != "RSA" || k.rsa_bits >= 2048])
+    error_message = "rsa_bits must be at least 2048 (the Azure SSH public key resource rejects smaller RSA keys)."
   }
 
   validation {
@@ -73,8 +79,8 @@ DESC
   }
 
   validation {
-    condition     = alltrue([for k in values(var.ssh_keys) : k.public_key == null || can(regex("^ssh-rsa ", coalesce(k.public_key, "ssh-rsa ")))])
-    error_message = "A supplied public_key must be in ssh-rsa format (the Azure SSH public key resource only accepts ssh-rsa, at least 2048-bit)."
+    condition     = alltrue([for k in values(var.ssh_keys) : k.public_key == null || can(regex("^(ssh-rsa|ssh-ed25519) ", coalesce(k.public_key, "ssh-rsa ")))])
+    error_message = "A supplied public_key must be in ssh-rsa or ssh-ed25519 format (the two key types the Azure SSH public key resource accepts)."
   }
 
   validation {
