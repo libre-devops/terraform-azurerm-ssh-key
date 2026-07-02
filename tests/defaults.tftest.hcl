@@ -1,8 +1,17 @@
 # Tests for the module. azurerm is mocked (no credentials, no cloud); the tls provider runs for real
-# so key generation is exercised. command = apply is used so the write-only vault path executes:
+# so ephemeral key generation is exercised. command = apply is used so the ephemeral resource opens
+# and the write-only vault path executes:
 #   terraform init -backend=false && terraform test
 
-mock_provider "azurerm" {}
+mock_provider "azurerm" {
+  # The read-back data source must return a PARSEABLE ssh-rsa key: the Azure resource's provider-side
+  # validation parses public_key, so the default random-string mock would fail it.
+  mock_data "azurerm_key_vault_secret" {
+    defaults = {
+      value = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCtbmPhzCR+ZpI/Y4H1IvPEI+tvGT4R5ReLtj5QZVcRXJiRdIbYsb6sjaYu8JcR6vzSHAlJcx0zmcSP4SR7HqtuXbODv+OvVpBCoil9LWbCfOgOQ6XZ3oSFYe8lFllbFLiM7I+ok+s7Cygnu58fil7pDdBFrS7DZRjvT87RrOX0dp2LDNNN7LYFy5nwHvkBv9z36q9RFGcP4e0XDNtU0+LGnolz4oDWkJt/0POaHIxnJJX7ge0r0bReZq/t1XRr/RrhPYk6gkWsSkfbwwxGPA2UdxFRDVn2aMx6Hz8gQfcHRS2kEvKRMIgQfBOmB6OInLCLaUZRWm5YdEBZXwtdREor example"
+    }
+  }
+}
 
 variables {
   resource_group_id = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-ldo-uks-tst-001"
@@ -11,7 +20,8 @@ variables {
   key_vault_id      = "/subscriptions/00000000-0000-0000-0000-000000000000/resourceGroups/rg-ldo-uks-tst-001/providers/Microsoft.KeyVault/vaults/kv-ldo-uks-tst-001"
 }
 
-# The secure default: a generated key lands as an Azure resource plus a write-only vault secret.
+# The secure default: an ephemerally generated key lands as two write-only vault secrets plus the
+# Azure resource fed from the read-back public half. No tls resource exists in state at all.
 run "generated_key_defaults" {
   command = apply
 
@@ -22,18 +32,13 @@ run "generated_key_defaults" {
   }
 
   assert {
-    condition     = startswith(azurerm_ssh_public_key.this["ssh_app_key"].public_key, "ssh-rsa ")
-    error_message = "The generated public key should be ssh-rsa (the only format Azure accepts)."
-  }
-
-  assert {
-    condition     = tls_private_key.this["ssh_app_key"].rsa_bits == 4096
-    error_message = "Generated keys should default to RSA 4096."
-  }
-
-  assert {
     condition     = azurerm_key_vault_secret.private_key["ssh_app_key"].name == "ssh-app-key"
-    error_message = "The secret name should default to the key name with underscores dashed (vault names forbid underscores)."
+    error_message = "The private secret name should default to the key name with underscores dashed."
+  }
+
+  assert {
+    condition     = azurerm_key_vault_secret.public_key["ssh_app_key"].name == "ssh-app-key-pub"
+    error_message = "The public secret name should default to the private name with a -pub suffix."
   }
 
   assert {
@@ -43,7 +48,12 @@ run "generated_key_defaults" {
 
   assert {
     condition     = azurerm_key_vault_secret.private_key["ssh_app_key"].content_type == "application/x-pem-file"
-    error_message = "The secret content type should default to the PEM media type."
+    error_message = "The private secret content type should default to the PEM media type."
+  }
+
+  assert {
+    condition     = startswith(azurerm_ssh_public_key.this["ssh_app_key"].public_key, "ssh-rsa ")
+    error_message = "The Azure resource should carry the public key read back from the vault."
   }
 
   assert {
@@ -52,11 +62,12 @@ run "generated_key_defaults" {
   }
 }
 
-# Bring your own: only the Azure resource exists, no key pair and no secret.
+# Bring your own: only the Azure resource exists, no secrets and no vault needed.
 run "byo_public_key" {
   command = apply
 
   variables {
+    key_vault_id = null
     ssh_keys = {
       byo-key = {
         public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCtbmPhzCR+ZpI/Y4H1IvPEI+tvGT4R5ReLtj5QZVcRXJiRdIbYsb6sjaYu8JcR6vzSHAlJcx0zmcSP4SR7HqtuXbODv+OvVpBCoil9LWbCfOgOQ6XZ3oSFYe8lFllbFLiM7I+ok+s7Cygnu58fil7pDdBFrS7DZRjvT87RrOX0dp2LDNNN7LYFy5nwHvkBv9z36q9RFGcP4e0XDNtU0+LGnolz4oDWkJt/0POaHIxnJJX7ge0r0bReZq/t1XRr/RrhPYk6gkWsSkfbwwxGPA2UdxFRDVn2aMx6Hz8gQfcHRS2kEvKRMIgQfBOmB6OInLCLaUZRWm5YdEBZXwtdREor example"
@@ -65,8 +76,8 @@ run "byo_public_key" {
   }
 
   assert {
-    condition     = length(tls_private_key.this) == 0 && length(azurerm_key_vault_secret.private_key) == 0
-    error_message = "A bring-your-own key should create no key pair and no secret."
+    condition     = length(azurerm_key_vault_secret.private_key) == 0 && length(azurerm_key_vault_secret.public_key) == 0
+    error_message = "A bring-your-own key should create no secrets."
   }
 
   assert {
@@ -98,37 +109,33 @@ run "secret_options" {
   }
 
   assert {
-    condition     = azurerm_key_vault_secret.private_key["rotated"].value_wo_version == 2
-    error_message = "A custom value_wo_version should pass through."
+    condition     = azurerm_key_vault_secret.public_key["rotated"].name == "ssh-rotated-custom-pub"
+    error_message = "The public secret should follow the explicit private name."
+  }
+
+  assert {
+    condition     = azurerm_key_vault_secret.private_key["rotated"].value_wo_version == 2 && azurerm_key_vault_secret.public_key["rotated"].value_wo_version == 2
+    error_message = "The rotation version should apply to both halves."
   }
 }
 
-# Generating without a vault fails the plan via the precondition (secure by default).
+# Generating without a vault fails the plan: generated key material has nowhere safe to live.
 run "rejects_generated_without_vault" {
   command = plan
 
   variables {
     key_vault_id = null
     ssh_keys = {
-      stateonly = {}
+      nowhere = {}
     }
   }
 
-  expect_failures = [azurerm_key_vault_secret.private_key]
-}
-
-# Explicitly opting out of vault storage is allowed but flagged by the check.
-run "flags_unvaulted_generated_key" {
-  command = plan
-
-  variables {
-    key_vault_id = null
-    ssh_keys = {
-      stateonly = { store_private_key_in_key_vault = false }
-    }
-  }
-
-  expect_failures = [check.generated_keys_are_vaulted]
+  # The deferred data source never evaluates once the secrets' preconditions fail, so only the two
+  # secret resources report.
+  expect_failures = [
+    azurerm_key_vault_secret.private_key,
+    azurerm_key_vault_secret.public_key,
+  ]
 }
 
 # Weak RSA sizes are rejected by variable validation.

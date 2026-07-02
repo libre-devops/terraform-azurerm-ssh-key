@@ -9,13 +9,6 @@ check "creates_at_least_one_key" {
   }
 }
 
-# A generated key that opts out of vault storage leaves its private half ONLY in Terraform state.
-check "generated_keys_are_vaulted" {
-  assert {
-    condition     = alltrue([for k, v in local.generated : v.store_private_key_in_key_vault])
-    error_message = "These generated keys opt out of key vault storage, so their private keys live only in Terraform state: ${join(", ", sort([for k, v in local.generated : k if !v.store_private_key_in_key_vault]))}. Protect the state, or store them in a vault."
-  }
-}
 
 # Vault storage flags on bring-your-own keys are inert (there is no private key to store).
 check "byo_keys_have_nothing_to_store" {

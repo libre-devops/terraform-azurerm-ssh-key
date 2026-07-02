@@ -1,6 +1,6 @@
-# No private key material is ever exported. The old module's sensitive private-key outputs are gone
-# deliberately: generated private keys go to the key vault (write-only), and everything here is
-# public material, metadata, and ids.
+# No private key material is ever exported, and none exists in state to export: generation is
+# ephemeral and both halves live in the key vault (written write-only). Everything here is public
+# material, metadata, and ids.
 
 output "ssh_public_keys" {
   description = "The Azure SSH public key resources, keyed by name. Full resource objects (public material only)."
@@ -27,24 +27,19 @@ output "public_keys_openssh" {
   value       = { for k, r in azurerm_ssh_public_key.this : k => r.public_key }
 }
 
-output "public_key_fingerprints_sha256" {
-  description = "Map of GENERATED key name to the SHA256 public key fingerprint."
-  value       = { for k, r in tls_private_key.this : k => r.public_key_fingerprint_sha256 }
-}
-
-output "public_key_fingerprints_md5" {
-  description = "Map of GENERATED key name to the MD5 public key fingerprint."
-  value       = { for k, r in tls_private_key.this : k => r.public_key_fingerprint_md5 }
-}
-
 output "private_key_secret_ids" {
-  description = "Map of key name to the vaulted private key secret's versioned id (generated, vault-stored keys only)."
+  description = "Map of key name to the vaulted private key secret's versioned id (generated keys only)."
   value       = { for k, s in azurerm_key_vault_secret.private_key : k => s.id }
 }
 
 output "private_key_secret_versionless_ids" {
   description = "Map of key name to the vaulted private key secret's versionless id (always resolves to the latest version)."
   value       = { for k, s in azurerm_key_vault_secret.private_key : k => s.versionless_id }
+}
+
+output "public_key_secret_ids" {
+  description = "Map of key name to the vaulted public key secret's versioned id (the state-free bridge secret)."
+  value       = { for k, s in azurerm_key_vault_secret.public_key : k => s.id }
 }
 
 output "resource_group_name" {

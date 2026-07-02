@@ -9,8 +9,9 @@ terraform {
       version = ">= 4.23.0, < 5.0.0"
     }
     tls = {
-      source  = "hashicorp/tls"
-      version = ">= 4.0.0, < 5.0.0"
+      source = "hashicorp/tls"
+      # 4.1.0 is where the tls provider gained the ephemeral tls_private_key.
+      version = ">= 4.1.0, < 5.0.0"
     }
   }
 }

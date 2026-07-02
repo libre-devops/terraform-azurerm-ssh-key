@@ -189,6 +189,6 @@ module "ssh_key" {
 | <a name="output_ids_zipmap"></a> [ids\_zipmap](#output\_ids\_zipmap) | Map of key name to { name, id }. |
 | <a name="output_private_key_secret_ids"></a> [private\_key\_secret\_ids](#output\_private\_key\_secret\_ids) | Map of key name to the vaulted private key secret id (no value; write-only). |
 | <a name="output_private_key_secret_versionless_ids"></a> [private\_key\_secret\_versionless\_ids](#output\_private\_key\_secret\_versionless\_ids) | Map of key name to the vaulted private key secret's versionless id. |
-| <a name="output_public_key_fingerprints_sha256"></a> [public\_key\_fingerprints\_sha256](#output\_public\_key\_fingerprints\_sha256) | Map of generated key name to the SHA256 fingerprint. |
+| <a name="output_public_key_secret_ids"></a> [public\_key\_secret\_ids](#output\_public\_key\_secret\_ids) | Map of key name to the vaulted public key secret id (the state-free bridge). |
 | <a name="output_public_keys_openssh"></a> [public\_keys\_openssh](#output\_public\_keys\_openssh) | Map of key name to the OpenSSH public key text. |
 <!-- END_TF_DOCS -->

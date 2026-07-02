@@ -13,9 +13,9 @@ output "public_keys_openssh" {
   value       = module.ssh_key.public_keys_openssh
 }
 
-output "public_key_fingerprints_sha256" {
-  description = "Map of generated key name to the SHA256 fingerprint."
-  value       = module.ssh_key.public_key_fingerprints_sha256
+output "public_key_secret_ids" {
+  description = "Map of key name to the vaulted public key secret id (the state-free bridge)."
+  value       = module.ssh_key.public_key_secret_ids
 }
 
 output "private_key_secret_ids" {

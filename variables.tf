@@ -20,7 +20,7 @@ variable "tags" {
 }
 
 variable "key_vault_id" {
-  description = "The Key Vault generated private keys are written into (as write-only secrets, never stored in the secret resource's state). Required unless every generated key opts out with store_private_key_in_key_vault = false."
+  description = "The Key Vault generated key material lives in: both halves are written as write-only secrets, and the public half is read back to feed the Azure resource. Required when any key is generated (bring-your-own keys need no vault)."
   type        = string
   default     = null
 }
@@ -31,33 +31,32 @@ The SSH keys to manage, keyed by the Azure SSH public key resource name. Two mod
 
 - Bring your own: set public_key (ssh-rsa, at least 2048-bit, per the Azure resource's contract) and
   only the Azure public key resource is created; no private key exists anywhere.
-- Generate (when public_key is null, the default): the module generates an RSA key pair (Azure only
-  accepts ssh-rsa public keys, so the algorithm is fixed; size via rsa_bits, default 4096), creates
-  the Azure public key resource, and BY DEFAULT writes the private key into key_vault_id through the
-  provider's write-only value_wo argument, so the secret resource never stores it. NOTE the honest
-  caveat: the tls_private_key resource itself keeps the key material in Terraform state (that is what
-  makes deriving the public key possible); protect the state, or bring your own public key for a
-  state-free result. The module deliberately exports NO private key material.
+- Generate (when public_key is null, the default): the key pair is generated EPHEMERALLY (never in
+  plan or state) and both halves are written into key_vault_id through the provider's write-only
+  value_wo argument; the public half is read back (public material, safe to persist) to create the
+  Azure public key resource. Azure only accepts ssh-rsa public keys, so the algorithm is fixed and
+  only rsa_bits varies (default 4096). Rotation is one knob: bump value_wo_version and a freshly
+  generated pair replaces both secrets and the Azure resource's key. The module deliberately exports
+  NO private key material.
 
-Generated-key attributes: rsa_bits; store_private_key_in_key_vault (default true; opting out leaves
-the private key ONLY in state, which a check flags); secret_name (defaults to the key name with
-underscores dashed, since vault secret names forbid underscores); secret_format (pem, openssh, or
-pkcs8; default pem); secret_content_type; secret_expiration_date / secret_not_before_date;
-value_wo_version (bump alongside key replacement to rotate the stored secret). tags merge over the
-module tags on the Azure resource and the secret.
+Generated-key attributes: rsa_bits; secret_name (defaults to the key name with underscores dashed,
+since vault secret names forbid underscores); public_secret_name (defaults to the private name with a
+-pub suffix); secret_format for the private half (pem, openssh, or pkcs8; default pem);
+secret_content_type; secret_expiration_date / secret_not_before_date; value_wo_version (bump to
+rotate the pair). tags merge over the module tags on the Azure resource and the secrets.
 DESC
 
   type = map(object({
     public_key = optional(string)
     rsa_bits   = optional(number, 4096)
 
-    store_private_key_in_key_vault = optional(bool, true)
-    secret_name                    = optional(string)
-    secret_format                  = optional(string, "pem")
-    secret_content_type            = optional(string, "application/x-pem-file")
-    secret_expiration_date         = optional(string)
-    secret_not_before_date         = optional(string)
-    value_wo_version               = optional(number, 1)
+    secret_name            = optional(string)
+    public_secret_name     = optional(string)
+    secret_format          = optional(string, "pem")
+    secret_content_type    = optional(string, "application/x-pem-file")
+    secret_expiration_date = optional(string)
+    secret_not_before_date = optional(string)
+    value_wo_version       = optional(number, 1)
 
     tags = optional(map(string))
   }))

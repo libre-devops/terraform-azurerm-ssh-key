@@ -14,8 +14,8 @@
 
 # Terraform Azure SSH Key
 
-Azure SSH public keys with generated private keys written to Key Vault write-only, and no key material
-in outputs.
+Azure SSH public keys with ephemeral generation: private keys go straight to Key Vault write-only and
+never touch Terraform state.
 
 [![CI](https://github.com/libre-devops/terraform-azurerm-ssh-key/actions/workflows/ci.yml/badge.svg)](https://github.com/libre-devops/terraform-azurerm-ssh-key/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/libre-devops/terraform-azurerm-ssh-key?sort=semver&label=release)](https://github.com/libre-devops/terraform-azurerm-ssh-key/releases/latest)
@@ -30,18 +30,17 @@ SSH keys keyed by the Azure resource name, in two modes per entry:
 
 - **Bring your own** (`public_key` set): only the `azurerm_ssh_public_key` resource is created; no
   private key exists anywhere. The most state-hygienic mode.
-- **Generate** (the default): the module generates an RSA key pair (Azure's SSH public key resource
-  only accepts ssh-rsa at 2048-bit or larger, so the algorithm is fixed and only `rsa_bits` varies,
-  defaulting to 4096), creates the Azure resource, and **by default writes the private key into your
-  Key Vault** through the provider's write-only `value_wo` argument, so the secret resource never
-  stores or displays it. Rotation of the stored secret is explicit via `value_wo_version`.
+- **Generate** (the default): the key pair comes from the tls provider's **ephemeral**
+  `tls_private_key`, so it exists only during the run and is **never stored in plan or state**. Both
+  halves are written into your Key Vault through the provider's write-only `value_wo` argument, and
+  the public half is read back (public material, safe to persist) to create the Azure resource. Azure
+  only accepts ssh-rsa at 2048-bit or larger, so the algorithm is fixed and only `rsa_bits` varies
+  (default 4096).
 
-Honesty about state: deriving a public key from a managed key pair requires the `tls_private_key`
-resource, which keeps the key material in Terraform state. The vault write and the absence of any
-private key output keep every OTHER surface clean, and a check flags generated keys that opt out of
-vault storage. (The tls provider's ephemeral `tls_private_key` cannot help here: ephemeral values
-cannot feed persisted arguments like the Azure resource's `public_key`.) For zero key material in
-state, bring your own public key.
+Rotation is one knob: an ephemeral resource regenerates every run, but the vault is only written when
+`value_wo_version` changes, so bumping it rotates the whole pair (both halves come from the same
+ephemeral instance, so they always match) and the Azure resource follows. The module exports no
+private key material, and none exists in state to export.
 
 Vault secret conveniences: names default to the key name with underscores dashed (vault names forbid
 underscores), `secret_format` picks PEM (default), OpenSSH, or PKCS#8, and content type, expiry, and
