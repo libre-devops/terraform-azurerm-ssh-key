@@ -17,9 +17,7 @@
 The full surface of the module: a generated key with the secure defaults (RSA 4096, private key
 written to the vault through value_wo), a generated key exercising every storage option (size, secret
 name, OpenSSH format, content type, expiry, a bumped rotation version, per-key tags), a generated
-ED25519 key, and a bring-your-own public key alongside them. The vault the private keys land in allow-lists the runner's
-egress IP (this subscription enforces default-deny network rules on key vaults) and uses access
-policies so the data-plane writes work immediately. Run it with `just e2e complete`, which applies
+ED25519 key, and a bring-your-own public key alongside them. The vault the private keys land in is a disposable, un-firewalled example vault using access policies so the data-plane writes work immediately (real vaults keep the module's firewall default; the terraform-azure action can allow-list your runner IP). Run it with `just e2e complete`, which applies
 the stack then always destroys it.
 
 [![Terraform Registry](https://img.shields.io/badge/registry-libre--devops-7B42BC?logo=terraform&logoColor=white)](https://registry.terraform.io/namespaces/libre-devops)
@@ -35,13 +33,6 @@ locals {
 }
 
 data "azurerm_client_config" "current" {}
-
-# The runner's public egress IP, so it can be allow-listed on the vault firewall (this subscription
-# enforces default-deny network rules on key vaults, so the writer's IP must be permitted).
-module "runner_ip" {
-  source  = "libre-devops/get-ip-address/external"
-  version = "~> 4.0"
-}
 
 module "tags" {
   source  = "libre-devops/tags/azurerm"
@@ -76,11 +67,19 @@ module "keyvault" {
     (local.kv_name) = {
       rbac_authorization_enabled = false
       purge_protection_enabled   = false
-      network_acls = {
-        default_action = "Deny"
-        bypass         = "AzureServices"
-        ip_rules       = ["${module.runner_ip.public_ip_address}/32"]
-      }
+
+      # The keyvault module firewalls vaults by default (deny with AzureServices bypass). This
+      # DISPOSABLE example vault opts out so the CI runner can reach the data plane without
+      # per-run IP allow-listing. For a real, firewalled vault either keep the default and
+      # allow-list your egress IP as below, or let the terraform-azure action do the dance for
+      # you (add-current-ip-to-key-vault-before-tf-run + firewall-key-vault-name inputs).
+      #
+      # network_acls = {
+      #   default_action = "Deny"
+      #   bypass         = "AzureServices"
+      #   ip_rules       = ["<your egress ip>/32"]
+      # }
+      network_acls = null
       access_policies = [
         {
           object_id          = data.azurerm_client_config.current.object_id
@@ -88,16 +87,6 @@ module "keyvault" {
         }
       ]
     }
-  }
-}
-
-# Give the vault firewall rule a moment to take effect before the data-plane secret writes.
-resource "time_sleep" "kv_firewall" {
-  create_duration = "60s"
-
-  triggers = {
-    vault = module.keyvault.ids[local.kv_name]
-    ip    = module.runner_ip.public_ip_address
   }
 }
 
@@ -140,7 +129,6 @@ module "ssh_key" {
     }
   }
 
-  depends_on = [time_sleep.kv_firewall]
 }
 ```
 
@@ -150,14 +138,12 @@ module "ssh_key" {
 |------|---------|
 | <a name="requirement_terraform"></a> [terraform](#requirement\_terraform) | >= 1.11.0, < 2.0.0 |
 | <a name="requirement_azurerm"></a> [azurerm](#requirement\_azurerm) | >= 4.23.0, < 5.0.0 |
-| <a name="requirement_time"></a> [time](#requirement\_time) | >= 0.9.0, < 1.0.0 |
 
 ## Providers
 
 | Name | Version |
 |------|---------|
 | <a name="provider_azurerm"></a> [azurerm](#provider\_azurerm) | >= 4.23.0, < 5.0.0 |
-| <a name="provider_time"></a> [time](#provider\_time) | >= 0.9.0, < 1.0.0 |
 
 ## Modules
 
@@ -165,7 +151,6 @@ module "ssh_key" {
 |------|--------|---------|
 | <a name="module_keyvault"></a> [keyvault](#module\_keyvault) | libre-devops/keyvault/azurerm | ~> 4.0 |
 | <a name="module_rg"></a> [rg](#module\_rg) | libre-devops/rg/azurerm | ~> 4.0 |
-| <a name="module_runner_ip"></a> [runner\_ip](#module\_runner\_ip) | libre-devops/get-ip-address/external | ~> 4.0 |
 | <a name="module_ssh_key"></a> [ssh\_key](#module\_ssh\_key) | ../../ | n/a |
 | <a name="module_tags"></a> [tags](#module\_tags) | libre-devops/tags/azurerm | ~> 4.0 |
 
@@ -173,7 +158,6 @@ module "ssh_key" {
 
 | Name | Type |
 |------|------|
-| [time_sleep.kv_firewall](https://registry.terraform.io/providers/hashicorp/time/latest/docs/resources/sleep) | resource |
 | [azurerm_client_config.current](https://registry.terraform.io/providers/hashicorp/azurerm/latest/docs/data-sources/client_config) | data source |
 
 ## Inputs
