@@ -91,6 +91,14 @@ data "azurerm_key_vault_secret" "public_key" {
   }
 }
 
+# What the Azure public key resource must follow: the supplied key for bring-your-own entries, the
+# rotation knob for generated ones. Changes here are the only thing that replaces the resource below.
+resource "terraform_data" "key_revision" {
+  for_each = var.ssh_keys
+
+  input = each.value.public_key != null ? sha256(each.value.public_key) : tostring(each.value.value_wo_version)
+}
+
 resource "azurerm_ssh_public_key" "this" {
   for_each = var.ssh_keys
 
@@ -102,4 +110,14 @@ resource "azurerm_ssh_public_key" "this" {
   # nonsensitive() is deliberate: the data source marks every secret value sensitive, but this half is
   # the PUBLIC key, and leaving the taint would force sensitive outputs across the module.
   public_key = each.value.public_key != null ? each.value.public_key : nonsensitive(trimspace(data.azurerm_key_vault_secret.public_key[each.key].value))
+
+  # The public key is latched once written. The read-back above is deferred to apply whenever
+  # anything it depends on has a pending change, which includes routine tag updates (a LastUpdated
+  # timestamp changes every run), so without the latch the key would be unknown at plan time and
+  # every VM using it would be replaced on every run. A real change (a value_wo_version bump, or a
+  # new bring-your-own key) replaces this resource through key_revision instead. Verified live.
+  lifecycle {
+    ignore_changes       = [public_key]
+    replace_triggered_by = [terraform_data.key_revision[each.key]]
+  }
 }

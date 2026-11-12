@@ -190,3 +190,29 @@ run "rejects_weak_rsa" {
 
   expect_failures = [var.ssh_keys]
 }
+
+# The public key is latched on the Azure resource and replaced only through key_revision: the rotation
+# knob for generated keys, a hash of the key for bring-your-own. Anything else (a routine tag update
+# that defers the read-back to apply) must leave the key, and so every VM using it, untouched.
+run "key_revision_tracks_rotation_and_byo" {
+  command = apply
+
+  variables {
+    ssh_keys = {
+      generated-key = { value_wo_version = 3 }
+      byo-key = {
+        public_key = "ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCtbmPhzCR+ZpI/Y4H1IvPEI+tvGT4R5ReLtj5QZVcRXJiRdIbYsb6sjaYu8JcR6vzSHAlJcx0zmcSP4SR7HqtuXbODv+OvVpBCoil9LWbCfOgOQ6XZ3oSFYe8lFllbFLiM7I+ok+s7Cygnu58fil7pDdBFrS7DZRjvT87RrOX0dp2LDNNN7LYFy5nwHvkBv9z36q9RFGcP4e0XDNtU0+LGnolz4oDWkJt/0POaHIxnJJX7ge0r0bReZq/t1XRr/RrhPYk6gkWsSkfbwwxGPA2UdxFRDVn2aMx6Hz8gQfcHRS2kEvKRMIgQfBOmB6OInLCLaUZRWm5YdEBZXwtdREor example"
+      }
+    }
+  }
+
+  assert {
+    condition     = terraform_data.key_revision["generated-key"].output == "3"
+    error_message = "A generated key's revision should follow value_wo_version."
+  }
+
+  assert {
+    condition     = terraform_data.key_revision["byo-key"].output == sha256(var.ssh_keys["byo-key"].public_key)
+    error_message = "A bring-your-own key's revision should follow the key itself."
+  }
+}
